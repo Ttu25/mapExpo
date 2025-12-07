@@ -1,4 +1,4 @@
-export default function MapWebView({LOCATIONS}: any) {
+export default function MapWebView({ LOCATIONS }: any) {
     const mapHtml = `
     <!DOCTYPE html>
     <html>
@@ -6,6 +6,12 @@ export default function MapWebView({LOCATIONS}: any) {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+        
+        <!-- Leaflet.markercluster assets -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+        <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+
         <style>
             body { margin: 0; padding: 0; height: 100vh; width: 100vw; }
             #map { height: 100%; width: 100%; }
@@ -44,12 +50,15 @@ export default function MapWebView({LOCATIONS}: any) {
 
             var markers = [];
             var userMarker;
+            
+            // Initialize Marker Cluster Group
+            var markersCluster = L.markerClusterGroup();
 
             // Load predefined locations
             var locations = ${JSON.stringify(LOCATIONS)};
             
             locations.forEach(loc => {
-                var marker = L.marker([loc.lat, loc.lng]).addTo(map);
+                var marker = L.marker([loc.lat, loc.lng]);
                 marker.on('click', function(e) {
                     L.DomEvent.stopPropagation(e);
                     window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -57,8 +66,12 @@ export default function MapWebView({LOCATIONS}: any) {
                         id: loc.id
                     }));
                 });
+                markersCluster.addLayer(marker);
                 markers.push(marker);
             });
+            
+            // Add cluster group to map instead of individual markers
+            map.addLayer(markersCluster);
 
             function openMaps(lat, lng) {
                 window.ReactNativeWebView.postMessage(JSON.stringify({
