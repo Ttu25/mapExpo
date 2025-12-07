@@ -1,7 +1,8 @@
 import { COLORS, SPACING } from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 // Sample locations
@@ -17,6 +18,7 @@ const LOCATIONS = [
 export default function Map() {
     const webViewRef = useRef<WebView>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isLocating, setIsLocating] = useState(false);
 
     const mapHtml = `
     <!DOCTYPE html>
@@ -96,20 +98,35 @@ export default function Map() {
                     fillOpacity: 0.8
                 }).addTo(map);
                 
-                map.setView([lat, lng], 14);
+                map.flyTo([lat, lng], 15, {
+                    animate: true,
+                    duration: 1.5
+                });
             }
         </script>
     </body>
     </html>
     `;
 
-    const handleLocateMe = () => {
-        if (webViewRef.current) {
-            webViewRef.current.injectJavaScript(`
-                navigator.geolocation.getCurrentPosition(function(position) {
-                    window.updateUserLocation(position.coords.latitude, position.coords.longitude);
-                });
-            `);
+    const handleLocateMe = async () => {
+        setIsLocating(true);
+        try {
+            let { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                return;
+            }
+
+            let location = await Location.getCurrentPositionAsync({});
+            if (webViewRef.current) {
+                webViewRef.current.injectJavaScript(`
+                    window.updateUserLocation(${location.coords.latitude}, ${location.coords.longitude});
+                    true;
+                `);
+            }
+        } catch (error) {
+            console.error('Error getting location:', error);
+        } finally {
+            setIsLocating(false);
         }
     };
 
@@ -149,9 +166,13 @@ export default function Map() {
 
                 {/* Overlay Controls */}
                 <View style={styles.controls}>
-                    <TouchableOpacity style={styles.controlButton} onPress={handleLocateMe}>
-                        <Ionicons name="navigate" size={24} color={COLORS.primary} />
-                    </TouchableOpacity>
+                    <Pressable style={styles.controlButton} onPress={handleLocateMe} disabled={isLocating}>
+                        {isLocating ? (
+                            <ActivityIndicator size="small" color={COLORS.primary} />
+                        ) : (
+                            <Ionicons name="navigate" size={24} color={COLORS.primary} />
+                        )}
+                    </Pressable>
                 </View>
 
 
@@ -188,7 +209,7 @@ const styles = StyleSheet.create({
     controls: {
         position: 'absolute',
         right: SPACING.lg,
-        bottom: 120, // Above info card
+        bottom: 60, // Above info card
         gap: SPACING.md,
     },
     controlButton: {
