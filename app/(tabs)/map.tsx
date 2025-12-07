@@ -1,0 +1,207 @@
+import { COLORS, SPACING } from '@/constants/colors';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useRef, useState } from 'react';
+import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { WebView } from 'react-native-webview';
+
+// Sample locations
+const LOCATIONS = [
+    { id: 1, lat: 21.0285, lng: 105.8542, name: 'Hanoi Opera House' },
+    { id: 2, lat: 21.0307, lng: 105.8524, name: 'Hoan Kiem Lake' },
+    { id: 3, lat: 21.0333, lng: 105.8499, name: 'Thang Long Water Puppet Theatre' },
+    { id: 4, lat: 21.0358, lng: 105.8364, name: 'Ho Chi Minh Mausoleum' },
+    { id: 5, lat: 21.0234, lng: 105.8466, name: 'Hanoi Train Street' },
+    { id: 6, lat: 20.9983623, lng: 105.8199796, name: 'Tô Viễn Diện' },
+];
+
+export default function Map() {
+    const webViewRef = useRef<WebView>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const mapHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+        <style>
+            body { margin: 0; padding: 0; height: 100vh; width: 100vw; }
+            #map { height: 100%; width: 100%; }
+            .leaflet-popup-content {
+                text-align: center;
+            }
+            .btn-navigate {
+                background-color: #007bff;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                cursor: pointer;
+                margin-top: 5px;
+                font-size: 12px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="map"></div>
+        <script>
+            var map = L.map('map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([21.0285, 105.8542], 13);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            var markers = [];
+            var userMarker;
+
+            // Load predefined locations
+            var locations = ${JSON.stringify(LOCATIONS)};
+            
+            locations.forEach(loc => {
+                var marker = L.marker([loc.lat, loc.lng]).addTo(map);
+                
+                // Content for the popup
+                var popupContent = '<b>' + loc.name + '</b><br>' +
+                    '<button class="btn-navigate" onclick="openMaps(' + loc.lat + ',' + loc.lng + ')">Google Maps ↗</button>';
+
+                marker.bindPopup(popupContent);
+                markers.push(marker);
+            });
+
+            function openMaps(lat, lng) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'navigate',
+                    lat: lat,
+                    lng: lng
+                }));
+            }
+
+            // Function to update user location
+            window.updateUserLocation = function(lat, lng) {
+                if (userMarker) {
+                    map.removeLayer(userMarker);
+                }
+                
+                // Different icon or color for user could be added here
+                userMarker = L.circleMarker([lat, lng], {
+                    radius: 8,
+                    fillColor: "#3388ff",
+                    color: "#000",
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(map);
+                
+                map.setView([lat, lng], 14);
+            }
+        </script>
+    </body>
+    </html>
+    `;
+
+    const handleLocateMe = () => {
+        if (webViewRef.current) {
+            webViewRef.current.injectJavaScript(`
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    window.updateUserLocation(position.coords.latitude, position.coords.longitude);
+                });
+            `);
+        }
+    };
+
+    const handleMessage = (event: any) => {
+        try {
+            const data = JSON.parse(event.nativeEvent.data);
+            if (data.type === 'navigate') {
+                const url = `https://www.google.com/maps/search/?api=1&query=${data.lat},${data.lng}`;
+                Linking.openURL(url).catch(err => console.error('An error occurred', err));
+            }
+        } catch (error) {
+            console.log('Error parsing message from webview', error);
+        }
+    };
+
+    return (
+        <View style={styles.container}>
+
+            {/* Map View */}
+            <View style={styles.mapContainer}>
+                <WebView
+                    ref={webViewRef}
+                    source={{ html: mapHtml }}
+                    style={styles.webview}
+                    onLoadEnd={() => setIsLoading(false)}
+                    javaScriptEnabled={true}
+                    domStorageEnabled={true}
+                    startInLoadingState={true}
+                    onMessage={handleMessage}
+                    renderLoading={() => (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="large" color={COLORS.primary} />
+                            <Text style={styles.loadingText}>loading</Text>
+                        </View>
+                    )}
+                />
+
+                {/* Overlay Controls */}
+                <View style={styles.controls}>
+                    <TouchableOpacity style={styles.controlButton} onPress={handleLocateMe}>
+                        <Ionicons name="navigate" size={24} color={COLORS.primary} />
+                    </TouchableOpacity>
+                </View>
+
+
+            </View>
+        </View>
+    )
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: COLORS.dark.background,
+    },
+    mapContainer: {
+        flex: 1,
+        position: 'relative',
+    },
+    webview: {
+        flex: 1,
+        backgroundColor: COLORS.dark.background, // Match container bg
+    },
+    loadingContainer: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: COLORS.dark.background,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    loadingText: {
+        marginTop: SPACING.md,
+        color: COLORS.dark.text,
+        fontSize: 16,
+    },
+    controls: {
+        position: 'absolute',
+        right: SPACING.lg,
+        bottom: 120, // Above info card
+        gap: SPACING.md,
+    },
+    controlButton: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: COLORS.light.background,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+});
